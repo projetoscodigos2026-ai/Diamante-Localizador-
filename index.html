@@ -113,10 +113,23 @@
   .diamond-marker{width:20px;height:20px;position:relative;}
   .diamond-marker svg{width:100%;height:100%;filter:drop-shadow(0 0 8px rgba(255,61,129,0.8));}
 
+  /* ===== colapsar painéis ===== */
+  .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;}
+  .panel-toggle{
+    width:22px;height:22px;flex-shrink:0;border:1px solid var(--line);border-radius:3px;
+    display:flex;align-items:center;justify-content:center;color:var(--ice);font-size:13px;
+    background:rgba(185,230,255,0.06);
+  }
+  .facet-panel.collapsed .panel-body{display:none;}
+  .facet-panel.collapsed{padding-bottom:10px !important;}
+
   @media (max-width:640px){
-    #searchPanel{width:calc(100vw - 32px);}
-    #geoPanel,#telemPanel{width:calc(50vw - 24px);}
+    #searchPanel{width:min(260px,72vw);}
+    #geoPanel{width:min(220px,56vw);}
+    #telemPanel{width:min(190px,42vw);}
     #brand h1{font-size:12px;}
+    #brand{padding:10px 14px 10px 12px;}
+    .facet-panel{padding:11px;}
   }
 </style>
 </head>
@@ -136,36 +149,66 @@
 </div>
 
 <div id="searchPanel" class="facet-panel">
-  <label>Localizar endereço</label>
-  <div class="search-row">
-    <input id="addrInput" type="text" placeholder="Ex: Av. Paulista, São Paulo" autocomplete="off">
-    <button class="btn" onclick="buscarEndereco()">IR</button>
+  <div class="panel-head" onclick="togglePanel('searchPanel')">
+    <label style="margin:0;">Localizar endereço</label>
+    <div class="panel-toggle" id="searchPanelToggle">▁</div>
   </div>
-  <div id="searchStatus"></div>
-  <button class="btn ghost" style="width:100%;margin-top:8px;" onclick="usarMinhaLocalizacao()">📍 Minha localização real (GPS)</button>
-
-  <div class="layer-list" id="layerList"></div>
+  <div class="panel-body">
+    <div class="search-row" style="margin-top:10px;">
+      <input id="addrInput" type="text" placeholder="Ex: Av. Paulista, São Paulo" autocomplete="off" onclick="event.stopPropagation()">
+      <button class="btn" onclick="event.stopPropagation();buscarEndereco()">IR</button>
+    </div>
+    <div id="searchStatus"></div>
+    <button class="btn ghost" style="width:100%;margin-top:8px;" onclick="event.stopPropagation();usarMinhaLocalizacao()">📍 Minha localização real (GPS)</button>
+    <div class="layer-list" id="layerList" onclick="event.stopPropagation()"></div>
+  </div>
 </div>
 
-<div id="geoPanel" class="facet-panel">
-  <h3>Coordenadas do cursor</h3>
-  <div class="geo-row"><span>LAT</span><span id="lat">—</span></div>
-  <div class="geo-row"><span>LON</span><span id="lon">—</span></div>
-  <div class="geo-row"><span>ZOOM</span><span id="zoomLvl">—</span></div>
-  <div id="geoAddr">Clique no mapa para identificar o local.</div>
+<div id="geoPanel" class="facet-panel collapsed">
+  <div class="panel-head" onclick="togglePanel('geoPanel')">
+    <h3 style="margin:0;">Coordenadas do cursor</h3>
+    <div class="panel-toggle" id="geoPanelToggle">▔</div>
+  </div>
+  <div class="panel-body" style="margin-top:10px;">
+    <div class="geo-row"><span>LAT</span><span id="lat">—</span></div>
+    <div class="geo-row"><span>LON</span><span id="lon">—</span></div>
+    <div class="geo-row"><span>ZOOM</span><span id="zoomLvl">—</span></div>
+    <div id="geoAddr">Clique no mapa para identificar o local.</div>
+  </div>
 </div>
 
-<div id="telemPanel" class="facet-panel">
-  <h3><span class="live-dot"></span> ISS — telemetria real</h3>
-  <div class="telem-row"><span>LAT</span><span id="issLat">carregando…</span></div>
-  <div class="telem-row"><span>LON</span><span id="issLon">—</span></div>
-  <div class="telem-row"><span>ALT</span><span id="issAlt">—</span></div>
-  <div class="telem-row"><span>VEL</span><span id="issVel">—</span></div>
-  <div id="issNote">Dados reais via WhereTheISS.at (NORAD 25544). Atualiza a cada 8s.</div>
+<div id="telemPanel" class="facet-panel collapsed">
+  <div class="panel-head" onclick="togglePanel('telemPanel')">
+    <h3 style="margin:0;"><span class="live-dot"></span> ISS</h3>
+    <div class="panel-toggle" id="telemPanelToggle">▔</div>
+  </div>
+  <div class="panel-body" style="margin-top:8px;">
+    <div class="telem-row"><span>LAT</span><span id="issLat">carregando…</span></div>
+    <div class="telem-row"><span>LON</span><span id="issLon">—</span></div>
+    <div class="telem-row"><span>ALT</span><span id="issAlt">—</span></div>
+    <div class="telem-row"><span>VEL</span><span id="issVel">—</span></div>
+    <div id="issNote">Dados reais via WhereTheISS.at (NORAD 25544). Atualiza a cada 8s.</div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+// ============ PAINÉIS COLAPSÁVEIS ============
+function togglePanel(id){
+  const painel = document.getElementById(id);
+  const toggle = document.getElementById(id+'Toggle');
+  painel.classList.toggle('collapsed');
+  toggle.textContent = painel.classList.contains('collapsed') ? '▔' : '▁';
+}
+function fecharPainel(id){
+  const painel = document.getElementById(id);
+  const toggle = document.getElementById(id+'Toggle');
+  if(!painel.classList.contains('collapsed')){
+    painel.classList.add('collapsed');
+    toggle.textContent = '▔';
+  }
+}
+
 // ============ MAPA ============
 const map = L.map('map', { zoomControl:false, attributionControl:true }).setView([-15.78,-47.93], 4);
 
@@ -254,6 +297,7 @@ async function buscarEndereco(){
     document.getElementById('lon').textContent = lon.toFixed(5)+'°';
     document.getElementById('geoAddr').textContent = d[0].display_name;
     status.textContent = '✅ Local encontrado.';
+    setTimeout(()=>fecharPainel('searchPanel'), 900);
   }catch(err){
     status.textContent = '❌ Erro de conexão.';
   }
@@ -273,6 +317,7 @@ function usarMinhaLocalizacao(){
     document.getElementById('lat').textContent = latitude.toFixed(5)+'°';
     document.getElementById('lon').textContent = longitude.toFixed(5)+'°';
     status.textContent = '✅ GPS obtido.';
+    setTimeout(()=>fecharPainel('searchPanel'), 900);
   }, err=>{ status.textContent = '❌ '+err.message; }, {enableHighAccuracy:true, timeout:10000});
 }
 
