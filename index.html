@@ -45,7 +45,7 @@
   }
 
   /* ===== brand mark ===== */
-  #brand{top:16px;left:16px;padding:14px 20px 14px 16px;display:flex;align-items:center;gap:12px;}
+  #brand{top:16px;left:70px;padding:14px 20px 14px 16px;display:flex;align-items:center;gap:12px;}
   .gem{width:26px;height:26px;position:relative;flex-shrink:0;}
   .gem svg{width:100%;height:100%;filter:drop-shadow(0 0 6px rgba(185,230,255,0.55));}
   #brand h1{font-family:'Orbitron',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;
@@ -113,7 +113,17 @@
   .diamond-marker{width:20px;height:20px;position:relative;}
   .diamond-marker svg{width:100%;height:100%;filter:drop-shadow(0 0 8px rgba(255,61,129,0.8));}
 
-  /* ===== colapsar painéis ===== */
+  /* ===== botão mestre de esconder UI ===== */
+  #uiToggle{
+    position:absolute; top:16px; left:16px; z-index:600;
+    width:44px;height:44px;border-radius:50%;
+    background:var(--bg-panel); backdrop-filter:blur(14px);
+    border:1px solid var(--line); color:var(--ice-bright);
+    display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;
+    box-shadow:0 6px 20px rgba(0,0,0,0.5);
+  }
+  body.ui-hidden .facet-panel{display:none;}
+  body.ui-hidden #brand{display:none;}
   .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;}
   .panel-toggle{
     width:22px;height:22px;flex-shrink:0;border:1px solid var(--line);border-radius:3px;
@@ -121,11 +131,15 @@
     background:rgba(185,230,255,0.06);
   }
   .facet-panel.collapsed .panel-body{display:none;}
-  .facet-panel.collapsed{padding-bottom:10px !important;}
+  .facet-panel.collapsed{padding-bottom:10px !important; width:auto !important; max-width:none;}
+  .facet-panel.collapsed .panel-head{white-space:nowrap;}
+  #brand{max-width:56vw;}
+  #brand h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
   @media (max-width:640px){
-    #searchPanel{width:min(260px,72vw);}
-    #geoPanel{width:min(220px,56vw);}
+    #searchPanel{width:min(260px,72vw); top:74px; right:16px;}
+    #brand{max-width:60vw;}
+    #geoPanel{width:min(220px,56vw); bottom:74px;}
     #telemPanel{width:min(190px,42vw);}
     #brand h1{font-size:12px;}
     #brand{padding:10px 14px 10px 12px;}
@@ -137,6 +151,7 @@
 
 <div id="map"></div>
 <div id="sweep"></div>
+<div id="uiToggle" onclick="toggleUI()">☰</div>
 
 <div id="brand" class="facet-panel">
   <div class="gem">
@@ -193,6 +208,12 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+// ============ BOTÃO MESTRE: ESCONDER TODOS OS PAINÉIS ============
+function toggleUI(){
+  document.body.classList.toggle('ui-hidden');
+  document.getElementById('uiToggle').textContent = document.body.classList.contains('ui-hidden') ? '⊞' : '☰';
+}
+
 // ============ PAINÉIS COLAPSÁVEIS ============
 function togglePanel(id){
   const painel = document.getElementById(id);
@@ -281,26 +302,47 @@ document.getElementById('zoomLvl').textContent = map.getZoom();
 
 // ============ BUSCA DE ENDEREÇO (Nominatim — real, gratuito) ============
 async function buscarEndereco(){
-  const q = document.getElementById('addrInput').value.trim();
+  const qOriginal = document.getElementById('addrInput').value.trim();
   const status = document.getElementById('searchStatus');
-  if(!q){ status.textContent = 'Digite um endereço.'; return; }
-  status.textContent = 'Consultando OpenStreetMap...';
-  try{
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`);
-    const d = await r.json();
-    if(!d.length){ status.textContent = 'Endereço não encontrado.'; return; }
-    const lat = parseFloat(d[0].lat), lon = parseFloat(d[0].lon);
-    map.flyTo([lat,lon], 17, {duration:1.4});
-    if (marcador) map.removeLayer(marcador);
-    marcador = L.marker([lat,lon], {icon:diamondIcon}).addTo(map);
-    document.getElementById('lat').textContent = lat.toFixed(5)+'°';
-    document.getElementById('lon').textContent = lon.toFixed(5)+'°';
-    document.getElementById('geoAddr').textContent = d[0].display_name;
-    status.textContent = '✅ Local encontrado.';
-    setTimeout(()=>fecharPainel('searchPanel'), 900);
-  }catch(err){
-    status.textContent = '❌ Erro de conexão.';
+  if(!qOriginal){ status.textContent = 'Digite um endereço.'; return; }
+
+  // Gera variações progressivamente mais simples (remove a primeira parte, geralmente rua/bairro)
+  const partes = qOriginal.split(',').map(p=>p.trim()).filter(Boolean);
+  const tentativas = [];
+  for(let i=0;i<partes.length;i++){
+    tentativas.push(partes.slice(i).join(', '));
   }
+  if(tentativas.length===0) tentativas.push(qOriginal);
+
+  status.textContent = 'Consultando OpenStreetMap...';
+
+  for(let i=0;i<tentativas.length;i++){
+    try{
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(tentativas[i])}&countrycodes=br&limit=1`);
+      const d = await r.json();
+      if(d.length){
+        const lat = parseFloat(d[0].lat), lon = parseFloat(d[0].lon);
+        const zoomAlvo = i===0 ? 17 : Math.max(17 - i*3, 6); // se caiu pra nível mais genérico, dá menos zoom
+        map.flyTo([lat,lon], zoomAlvo, {duration:1.4});
+        if (marcador) map.removeLayer(marcador);
+        marcador = L.marker([lat,lon], {icon:diamondIcon}).addTo(map);
+        document.getElementById('lat').textContent = lat.toFixed(5)+'°';
+        document.getElementById('lon').textContent = lon.toFixed(5)+'°';
+        document.getElementById('geoAddr').textContent = d[0].display_name;
+        if(i===0){
+          status.textContent = '✅ Endereço exato encontrado.';
+        } else {
+          status.textContent = `⚠️ Rua/bairro não mapeado no OpenStreetMap. Mostrando o nível mais próximo disponível: "${tentativas[i]}".`;
+        }
+        setTimeout(()=>fecharPainel('searchPanel'), 1400);
+        return;
+      }
+    }catch(err){
+      status.textContent = '❌ Erro de conexão.';
+      return;
+    }
+  }
+  status.textContent = '❌ Nenhum resultado encontrado, nem por cidade/estado.';
 }
 document.getElementById('addrInput').addEventListener('keydown', e=>{ if(e.key==='Enter') buscarEndereco(); });
 
